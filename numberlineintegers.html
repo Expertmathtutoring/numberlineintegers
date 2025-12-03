@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>🎯 Integer Number Line Learning Game – Stage 4 (Rescaling, Toolbars, Restart)</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+  body {
+    font-family: "Poppins", sans-serif;
+    text-align: center;
+    background: linear-gradient(135deg,#e3f2fd,#e8f5e9);
+    margin: 0;
+    padding: 20px;
+  }
+  h1 { font-size: 28px; color:#2c387e; margin-bottom:8px; }
+  #gameBox {
+    max-width: 980px;
+    margin: 10px auto;
+    padding: 18px;
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 6px 26px rgba(0,0,0,.12);
+  }
+  #topControls { display:flex; gap:8px; justify-content:center; margin-bottom:12px; flex-wrap:wrap; }
+  .tabBtn { padding:8px 14px; border-radius:8px; border:none; background:#4f46e5; color:#fff; cursor:pointer; }
+  .restartBtn { background:#ef4444; }
+  #question { font-size:20px; margin:8px 0; font-weight:600; }
+  #numberLine {
+    position: relative;
+    width: 100%;
+    max-width: 860px;
+    height: 120px;
+    margin: 14px auto;
+    border-bottom: 4px solid #111827;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.02), transparent);
+  }
+  .tick {
+    position:absolute; width:2px; height:20px; background:#111827; bottom:0;
+  }
+  .tickLabel {
+    position:absolute; bottom:-26px; font-size:14px; transform:translateX(-50%);
+    color:#111827;
+  }
+  #player {
+    position:absolute; bottom:26px; width:34px; height:34px; border-radius:50%;
+    background:#ef4444; color:white; display:flex; align-items:center; justify-content:center;
+    font-weight:700; box-shadow:0 4px 8px rgba(0,0,0,.18);
+    transition:left .7s cubic-bezier(.2,.9,.2,1), transform .13s;
+  }
+  .small-note { font-size:13px; color:#475569; margin-top:6px; }
+  .controlsRow { display:flex; gap:12px; justify-content:center; margin-top:12px; flex-wrap:wrap; }
+  input#answerInput {
+    font-size:18px; padding:8px 10px; width:220px; border-radius:10px; border:2px solid #93c5fd;
+    text-align:center;
+  }
+  button#submitBtn { font-size:16px; padding:8px 14px; border-radius:10px; background:#10b981; color:#fff; border:none; cursor:pointer; }
+  #feedback { font-size:18px; margin-top:10px; min-height:28px; font-weight:600; }
+  #fireworks { display:none; font-size:34px; margin-top:6px; }
+  .toolbar { display:flex; gap:6px; flex-wrap:wrap; justify-content:center; margin-top:8px; padding:8px; border-radius:10px; background:#f8fafc; }
+  .keyBtn { padding:8px 10px; background:#e6eefc; border-radius:8px; border:1px solid #dbeafe; cursor:pointer; user-select:none; }
+  .keyBtn:active { transform:translateY(1px); }
+  .sectionTitle { font-size:13px; color:#334155; margin-bottom:6px; }
+  .footerRow { display:flex; gap:12px; justify-content:center; align-items:center; margin-top:14px; flex-wrap:wrap; }
+  .scoreBox { background:#f1f5f9; padding:6px 10px; border-radius:8px; color:#0f172a; font-weight:600; }
+  @media (max-width:520px){
+    input#answerInput { width:160px; }
+    #numberLine { height:110px; }
+  }
+</style>
+</head>
+<body>
+  <h1>🎯 Integer Number Line Learning Game (NSW Stage 4)</h1>
+
+  <div id="gameBox">
+    <div id="topControls">
+      <button id="prevBtn" class="tabBtn">◀ Prev</button>
+      <button id="nextBtn" class="tabBtn">Next ▶</button>
+      <button id="restartBtn" class="tabBtn restartBtn">🔄 Restart</button>
+      <div class="scoreBox" id="scoreBox">Score: 0</div>
+    </div>
+
+    <div id="question">Loading...</div>
+
+    <div id="numberLine" aria-hidden="false">
+      <div id="player">●</div>
+    </div>
+    <div class="small-note" id="rangeNote">Range: -10 to 10</div>
+
+    <div class="controlsRow">
+      <input id="answerInput" placeholder="Enter answer or expression (e.g. -4 or -2+3)" autocomplete="off" />
+      <button id="submitBtn">Submit</button>
+    </div>
+
+    <div id="feedback" role="status" aria-live="polite"></div>
+    <div id="fireworks">🎆 🎉 ✨</div>
+
+    <div style="margin-top:12px;">
+      <div style="margin-bottom:6px; font-weight:600; color:#334155">Numbers (click or drag → drop into input)</div>
+      <div id="numbersToolbar" class="toolbar"></div>
+
+      <div style="margin-top:10px; margin-bottom:6px; font-weight:600; color:#334155">Operators</div>
+      <div id="opsToolbar" class="toolbar"></div>
+    </div>
+  </div>
+
+<script>
+/* ------------------- Utilities & Safe Eval ------------------- */
+function cleanInput(str) {
+  if (str===undefined || str===null) return "";
+  return String(str)
+    .replace(/\u2212/g,'-')       // unicode minus
+    .replace(/[×✕✖]/g,'*')        // unicode multiply to *
+    .replace(/[÷∕]/g,'/')         // unicode divide to /
+    .replace(/\s+/g,'')           // remove spaces for eval
+    .trim();
+}
+function safeEvalNumeric(expr) {
+  expr = cleanInput(expr);
+  if (!expr) return NaN;
+  if (/[A-Za-z]/.test(expr)) return NaN; // no letters allowed
+  if (!/^[0-9\.\+\-\*\/\(\)]+$/.test(expr)) return NaN;
+  try {
+    return Number(Function('"use strict"; return (' + expr + ')')());
+  } catch (e) {
+    return NaN;
+  }
+}
+function clamp(n,min,max){ return Math.max(min, Math.min(max,n)); }
+
+/* ------------------- Number line building & dynamic scaling ------------------- */
+const numberLine = document.getElementById('numberLine');
+const player = document.getElementById('player');
+const rangeNote = document.getElementById('rangeNote');
+let currentMin = -10, currentMax = 10;
+
+function chooseStep(min,max){
+  const range = Math.abs(max-min);
+  if (range <= 20) return 1;
+  if (range <= 50) return 2;
+  if (range <= 100) return 5;
+  return Math.ceil(range / 20);
+}
+
+function buildTicks(min = -10, max = 10){
+  currentMin = Math.floor(min);
+  currentMax = Math.ceil(max);
+  // prevent insane ranges
+  const maxRange = 200;
+  if (currentMax - currentMin > maxRange) {
+    const mid = (currentMin + currentMax)/2;
+    currentMin = Math.round(mid - maxRange/2);
+    currentMax = Math.round(mid + maxRange/2);
+  }
+
+  numberLine.innerHTML = ''; // clear everything
+  const step = chooseStep(currentMin, currentMax);
+  const range = currentMax - currentMin;
+  // add ticks by step
+  for (let v = currentMin; v <= currentMax; v += step) {
+    const frac = (v - currentMin) / range;
+    const tick = document.createElement('div');
+    tick.className = 'tick';
+    tick.style.left = (frac*100) + '%';
+    numberLine.appendChild(tick);
+    const lab = document.createElement('div');
+    lab.className = 'tickLabel';
+    lab.style.left = (frac*100) + '%';
+    lab.textContent = v;
+    numberLine.appendChild(lab);
+  }
+  // append player after ticks
+  numberLine.appendChild(player);
+  rangeNote.textContent = `Range: ${currentMin} to ${currentMax}`;
+}
+
+/* compute pixel left for a given number relative to currentMin/currentMax */
+function positionForNumber(n){
+  const min = currentMin, max = currentMax;
+  const range = max - min;
+  const frac = (n - min) / range;
+  const width = numberLine.clientWidth || numberLine.getBoundingClientRect().width;
+  const x = frac * width;
+  // center player (player width approx)
+  return x - (player.offsetWidth/2);
+}
+
+/* move to number; if number outside current range we rescale to include it (with padding) */
+function moveToNumber(n, animate=true){
+  // if outside range by more than 0, rescale
+  if (n < currentMin || n > currentMax) {
+    // choose padding as 20% of span or min 2 units
+    const span = currentMax - currentMin || 20;
+    const pad = Math.max(2, Math.round(span * 0.25));
+    let newMin = Math.min(currentMin, Math.floor(n) - pad);
+    let newMax = Math.max(currentMax, Math.ceil(n) + pad);
+    // ensure new span not too big; prefer symmetric around n if necessary
+    buildTicks(newMin, newMax);
+    // slight delay to allow rebuild before moving so animation is visible
+    setTimeout(()=> {
+      const left = positionForNumber(n);
+      player.style.left = left + 'px';
+    }, 30);
+  } else {
+    const left = positionForNumber(n);
+    player.style.left = left + 'px';
+  }
+  // small pop animation
+  player.style.transform = 'translateY(-6px) scale(1.05)';
+  setTimeout(()=> player.style.transform = '', 200);
+}
+
+/* Initialize default ticks */
+buildTicks(-10, 10);
+
+/* ------------------- Questions, flow, scoring ------------------- */
+const questions = [
+  { q:'-3 + 5', expr:'-3+5' }, { q:'4 + (-7)', expr:'4+(-7)' }, { q:'-6 + (-4)', expr:'-6+(-4)' },
+  { q:'9 + (-12)', expr:'9+(-12)' }, { q:'5 - 9', expr:'5-9' }, { q:'-2 - 8', expr:'-2-8' },
+  { q:'-7 - (-3)', expr:'-7-(-3)' }, { q:'10 - (-5)', expr:'10-(-5)' }, { q:'3 × -4', expr:'3*-4' },
+  { q:'-6 × -2', expr:'-6*-2' }, { q:'-5 × 3', expr:'-5*3' }, { q:'4 × -7', expr:'4*-7' },
+  { q:'20 ÷ -5', expr:'20/-5' }, { q:'-12 ÷ -3', expr:'-12/-3' }, { q:'-18 ÷ 6', expr:'-18/6' },
+  { q:'28 ÷ -7', expr:'28/-7' }, { q:'-3 + 8 - 10', expr:'-3+8-10' }, { q:'6 - 15 + 4', expr:'6-15+4' },
+  { q:'-10 + (-5) + 3', expr:'-10+(-5)+3' }, { q:'12 + (-4) - (-9)', expr:'12+(-4)-(-9)' }
+];
+
+let current = 0;
+let score = 0;
+const qEl = document.getElementById('question');
+const inputEl = document.getElementById('answerInput');
+const feedbackEl = document.getElementById('feedback');
+const fwEl = document.getElementById('fireworks');
+const scoreBox = document.getElementById('scoreBox');
+
+function loadQuestion(){
+  feedbackEl.textContent = '';
+  fwEl.style.display = 'none';
+  inputEl.value = '';
+  const item = questions[current];
+  if (!item) {
+    qEl.textContent = '🎉 Completed! Well done!';
+    return;
+  }
+  qEl.textContent = `Solve: ${item.q}`;
+  // reset marker to 0 or keep at last? we keep at 0 start
+  moveToNumber(0);
+}
+
+function expected(item){
+  return safeEvalNumeric(item.expr);
+}
+
+function showSuccessAt(val){
+  feedbackEl.textContent = '✅ Correct!';
+  feedbackEl.style.color = 'green';
+  fwEl.style.display = 'inline';
+  // rescale and move to the actual value (not clamped)
+  moveToNumber(val);
+  score++;
+  scoreBox.textContent = 'Score: ' + score;
+}
+
+function showTryAgain(){
+  feedbackEl.textContent = '❌ Try again — enter the numeric result (e.g. -4)';
+  feedbackEl.style.color = 'crimson';
+  fwEl.style.display = 'none';
+}
+
+/* submit check */
+function submitAnswer(){
+  const raw = inputEl.value;
+  const student = safeEvalNumeric(raw);
+  const item = questions[current];
+  if (!item) return;
+  const exp = expected(item);
+
+  if (!isNaN(student) && !isNaN(exp) && Math.abs(student - exp) < 1e-9) {
+    showSuccessAt(student);
+    // advance to next after short delay
+    setTimeout(()=> {
+      current++;
+      if (current >= questions.length) {
+        qEl.textContent = '🎉 You have completed all questions!';
+        feedbackEl.textContent = `Final score: ${score} / ${questions.length}`;
+        fwEl.style.display = 'inline';
+        return;
+      }
+      loadQuestion();
+    }, 900);
+    return;
+  }
+  showTryAgain();
+}
+
+/* Previous/Next/Restart controls */
+document.getElementById('submitBtn').addEventListener('click', submitAnswer);
+document.getElementById('restartBtn').addEventListener('click', ()=> {
+  current = 0; score = 0; scoreBox.textContent = 'Score: 0'; buildTicks(-10,10); loadQuestion();
+});
+document.getElementById('nextBtn').addEventListener('click', ()=> {
+  current = Math.min(questions.length, current + 1); loadQuestion();
+});
+document.getElementById('prevBtn').addEventListener('click', ()=> {
+  current = Math.max(0, current - 1); loadQuestion();
+});
+
+/* Enter key */
+inputEl.addEventListener('keydown',(e)=> { if (e.key === 'Enter') submitAnswer(); });
+
+/* responsive reposition on resize */
+window.addEventListener('resize', ()=> {
+  // if currently between questions, keep marker at 0
+  const item = questions[current];
+  if (!item) return;
+  // do not change currentMin/currentMax; just recalc player left for last known pos:
+  // We move to 0 if no correct answer yet, otherwise keep at last expected if correct
+  moveToNumber(0);
+});
+
+/* initial load */
+loadQuestion();
+
+/* ------------------- Toolbars: numbers and operators (click & drag/drop) ------------------- */
+const numbersToolbar = document.getElementById('numbersToolbar');
+const opsToolbar = document.getElementById('opsToolbar');
+
+const numberKeys = ['7','8','9','4','5','6','1','2','3','0','.','-','(',')'];
+const opsKeys = ['+','-','*','/','×','÷'];
+
+// helper to create a button that is draggable and clickable
+function makeKeyBtn(label){
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'keyBtn';
+  b.textContent = label;
+  b.draggable = true;
+  b.addEventListener('click', ()=> {
+    // append into input
+    inputEl.value = inputEl.value + label;
+    inputEl.focus();
+  });
+  b.addEventListener('dragstart', (ev)=> {
+    ev.dataTransfer.setData('text/plain', label);
+    // show drag ghost
+    try { ev.dataTransfer.setDragImage(b, 10, 10); } catch(e){}
+  });
+  return b;
+}
+
+numberKeys.forEach(k => numbersToolbar.appendChild(makeKeyBtn(k)));
+opsKeys.forEach(k => opsToolbar.appendChild(makeKeyBtn(k)));
+
+// support drop into input
+inputEl.addEventListener('dragover', (e)=> { e.preventDefault(); });
+inputEl.addEventListener('drop', (e)=> {
+  e.preventDefault();
+  const txt = e.dataTransfer.getData('text/plain');
+  inputEl.value = inputEl.value + txt;
+  inputEl.focus();
+});
+
+/* optional: clicking on tick labels could fill input with that number */
+numberLine.addEventListener('click', (ev)=> {
+  // if a label clicked, its textContent is the number
+  if (ev.target.classList.contains('tickLabel')) {
+    inputEl.value = inputEl.value + ev.target.textContent;
+    inputEl.focus();
+  }
+});
+</script>
+</body>
+</html>
