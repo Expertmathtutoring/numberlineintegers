@@ -1,4 +1,4 @@
-<!DOCTYPE html> 
+<!DOCTYPE html>  
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
@@ -54,13 +54,51 @@
   #feedback { font-size:18px; margin-top:10px; min-height:28px; font-weight:600; }
   #fireworks { display:none; font-size:34px; margin-top:6px; }
 
+  /* ------------------ NEW CLEANER HINT INTERFACE ------------------ */
+  .hintBox {
+    margin-top:12px;
+    background:#fff8e1;
+    border:2px solid #ffe082;
+    padding:12px 16px;
+    border-radius:12px;
+    font-size:16px;
+    color:#4e342e;
+    text-align:left;
+    max-width:760px;
+    margin-left:auto;
+    margin-right:auto;
+  }
+  .hintTitle {
+    font-weight:700;
+    margin-bottom:6px;
+    font-size:18px;
+    color:#d84315;
+  }
+  #hintText {
+    line-height:1.5;
+    display:block;
+    padding-left:6px;
+    border-left:4px solid #ffb74d;
+    min-height:28px;
+  }
+
+  .hintStepHighlight {
+    background:#fff3ce;
+    padding:6px 8px;
+    margin:6px 0;
+    border-radius:8px;
+    border-left:5px solid #ffcc80;
+    font-weight:600;
+  }
+
+  .hintControls { display:flex; gap:8px; justify-content:center; margin-top:8px; }
+  .scoreBox { background:#f1f5f9; padding:6px 10px; border-radius:8px; color:#0f172a; font-weight:600; }
+
+  /* Toolbars */
   .toolbar { display:flex; gap:6px; flex-wrap:wrap; justify-content:center; margin-top:8px; padding:8px; border-radius:10px; background:#f8fafc; }
   .keyBtn { padding:8px 10px; background:#e6eefc; border-radius:8px; border:1px solid #dbeafe; cursor:pointer; user-select:none; }
   .keyBtn:active { transform:translateY(1px); }
 
-  .hintBox { margin-top:12px; background:#fff8e1; border:1px solid #ffecb3; padding:10px; border-radius:8px; min-height:48px; font-size:15px; color:#5d4037; text-align:left; max-width:760px; margin-left:auto; margin-right:auto; }
-  .hintControls { display:flex; gap:8px; justify-content:center; margin-top:8px; }
-  .scoreBox { background:#f1f5f9; padding:6px 10px; border-radius:8px; color:#0f172a; font-weight:600; }
 </style>
 </head>
 <body>
@@ -89,9 +127,10 @@
   <div id="feedback"></div>
   <div id="fireworks">🎆 🎉 ✨</div>
 
+  <!-- NEW HINT UI -->
   <div class="hintBox" id="hintBox">
-    <strong>Step hint:</strong> 
-    <span id="hintText">(click "Show steps" to see worked steps)</span>
+    <div class="hintTitle">📘 Worked Steps</div>
+    <div id="hintText">(Click "Show steps" to begin step-by-step explanation)</div>
   </div>
 
   <div class="hintControls">
@@ -111,6 +150,8 @@
 </div>
 
 <script>
+/* Everything below is the SAME except hint display logic improved */
+
 /* ------------------- SAFE EVAL ------------------- */
 function cleanInput(str) {
   return String(str||"")
@@ -188,19 +229,14 @@ const questions = [
     steps: ['Start at 4.','Move 7 left.','Result = -3.'] },
   { q:'-6 + (-4)', expr:'-6+(-4)',
     steps: ['Start at -6.','Move 4 left.','Result = -10.'] },
-
   { q:'9 + (-12)', expr:'9+(-12)',
     steps: ['Start at 9.','Move 12 left.','Result = -3.'] },
-
   { q:'5 - 9', expr:'5-9',
     steps: ['Start at 5.','Move 9 left.','Result = -4.'] },
-
   { q:'-2 - 8', expr:'-2-8',
     steps: ['Start at -2.','Move 8 left.','Result = -10.'] },
-
   { q:'-7 - (-3)', expr:'-7-(-3)',
     steps: ['Start at -7.','Add 3 (move right).','Result = -4.'] },
-
   { q:'10 - (-5)', expr:'10-(-5)',
     steps: ['Start at 10.','Add 5.','Result = 15.'] }
 ];
@@ -235,13 +271,13 @@ function loadQuestion(){
   moveToNumber(start);
 
   stepIndex = 0;
-  hintTextEl.textContent = '(click "Show steps" to see worked steps)';
+  hintTextEl.innerHTML = `<span>(Click "Show steps" to start)</span>`;
   feedbackEl.textContent = '';
   fwEl.style.display = 'none';
   document.getElementById('answerInput').value = '';
 }
 
-/* ------------------- STEP SYSTEM (with 3s pause) ------------------- */
+/* ------------------- STEP SYSTEM ------------------- */
 function lock3s(callback) {
   isLocked = true;
   setTimeout(() => {
@@ -256,12 +292,14 @@ function showNextStep(){
   if (!item || !item.steps) return;
 
   if (stepIndex >= item.steps.length){
-    hintTextEl.textContent = '(no more steps)';
+    hintTextEl.innerHTML = '<div class="hintStepHighlight">(No more steps)</div>';
     return;
   }
 
   const step = item.steps[stepIndex];
-  hintTextEl.textContent = step;
+
+  /** 🔥 UPDATED: highlight each step visually */
+  hintTextEl.innerHTML = `<div class="hintStepHighlight">${step}</div>`;
 
   const m = step.match(/-?\d+/);
   if (m) moveToNumber(Number(m[0]));
@@ -269,7 +307,6 @@ function showNextStep(){
   stepIndex++;
 
   lock3s(() => {
-    // after 3s pause, if there is another step, move to its number
     if (stepIndex < item.steps.length){
       const nextStep = item.steps[stepIndex];
       const m2 = nextStep.match(/-?\d+/);
@@ -283,7 +320,8 @@ function showAllSteps(){
   const item = questions[current];
   if (!item || !item.steps) return;
 
-  hintTextEl.textContent = item.steps.join(' ⇢ ');
+  hintTextEl.innerHTML =
+    item.steps.map(s => `<div class="hintStepHighlight">${s}</div>`).join('');
 
   const last = item.steps[item.steps.length - 1];
   const m = last.match(/-?\d+/);
@@ -338,11 +376,9 @@ function submitAnswer(){
 
 /* ------------------- UI WIRING ------------------- */
 document.getElementById('submitBtn').addEventListener('click', submitAnswer);
-
 document.getElementById('answerInput').addEventListener('keydown', e => {
   if (e.key === 'Enter') submitAnswer();
 });
-
 document.getElementById('showStepsBtn').addEventListener('click', showStepsFromStart);
 document.getElementById('nextStepBtn').addEventListener('click', showNextStep);
 document.getElementById('showAllBtn').addEventListener('click', showAllSteps);
@@ -382,15 +418,14 @@ function makeKeyBtn(label){
   });
   return b;
 }
-
 numberKeys.forEach(k => numbersToolbar.appendChild(makeKeyBtn(k)));
 opsKeys.forEach(k => opsToolbar.appendChild(makeKeyBtn(k)));
 
-/* ------------------- INITIALISE ------------------- */
 buildTicks(-10, 10);
 loadQuestion();
-
 </script>
+
 </body>
 </html>
+
 
